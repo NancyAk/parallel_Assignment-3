@@ -1,0 +1,82 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <omp.h>
+
+#define IMG_WIDTH 800
+#define IMG_HEIGHT 800
+#define MAX_ITERATIONS 1000
+
+// Calculate the Mandelbrot set for a given point, with an early exit
+int mandelbrot(float x, float y) {
+    float real = 0.0, imag = 0.0;
+    int iterations = 0;
+    // Perform the iteration until the point escapes (real^2 + imag^2 > 4) or reaches max iterations
+    while (real * real + imag * imag <= 4.0f && iterations < MAX_ITERATIONS) {
+        float temp = real * real - imag * imag + x;
+        imag = 2.0f * real * imag + y;
+        real = temp;
+        iterations++;
+    }
+    return iterations;  // Return the number of iterations it took for this point to escape
+}
+
+int main() {
+    // Allocate memory for the Mandelbrot set image
+    int *image = (int*)malloc(IMG_WIDTH * IMG_HEIGHT * sizeof(int));
+
+    // Start measuring time for parallel computation
+    double start_time = omp_get_wtime();
+
+    // Set the number of threads for parallel execution (can be adjusted based on system capabilities)
+    int num_threads = 8;
+    omp_set_num_threads(num_threads);  // OpenMP directive to specify the number of threads
+
+    // Parallel region starts here
+    #pragma omp parallel for schedule(dynamic, 4) collapse(2)
+    // Explanation:
+    // - `#pragma omp parallel for`: Directs OpenMP to parallelize the following loop.
+    // - `schedule(dynamic, 4)`: OpenMP dynamically assigns chunks of 4 rows at a time to threads.
+    //   This helps with load balancing when the computational cost of each row may vary.
+    // - `collapse(2)`: This allows OpenMP to merge the two nested loops (over rows and columns) 
+    //   into one, increasing the total number of iterations for dynamic scheduling.
+    for (int j = 0; j < IMG_HEIGHT; j++) {
+        for (int i = 0; i < IMG_WIDTH; i++) {
+            // Scale the pixel coordinates (i, j) to the complex plane
+            float x = (i - IMG_WIDTH / 2.0f) * 4.0f / IMG_WIDTH;
+            float y = (j - IMG_HEIGHT / 2.0f) * 4.0f / IMG_WIDTH;
+            // Calculate the number of iterations for this point in the Mandelbrot set
+            image[j * IMG_WIDTH + i] = mandelbrot(x, y);
+        }
+    }
+
+    // End measuring time for parallel computation
+    double end_time = omp_get_wtime();
+    printf("Parallel execution time: %f seconds\n", end_time - start_time);
+
+    // Write the Mandelbrot set to a PPM file
+    FILE *fp = fopen("mandelbrot_optimized.ppm", "wb");
+    fprintf(fp, "P6\n%d %d\n255\n", IMG_WIDTH, IMG_HEIGHT);
+    for (int j = 0; j < IMG_HEIGHT; j++) {
+        for (int i = 0; i < IMG_WIDTH; i++) {
+            int index = j * IMG_WIDTH + i;
+            unsigned char r, g, b;
+            // Assign colors based on the number of iterations for each point
+            if (image[index] == MAX_ITERATIONS) {
+                r = g = b = 0;  // Black for points that are in the Mandelbrot set
+            } else {
+                r = (image[index] % 256);  // Red component
+                g = (image[index] % 256);  // Green component
+                b = (image[index] % 256);  // Blue component
+            }
+            fwrite(&r, 1, 1, fp);
+            fwrite(&g, 1, 1, fp);
+            fwrite(&b, 1, 1, fp);
+        }
+    }
+    fclose(fp);
+
+    // Free allocated memory for the image array
+    free(image);
+
+    return 0;
+}
