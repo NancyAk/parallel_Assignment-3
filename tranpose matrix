@@ -1,0 +1,69 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <omp.h>
+void transpose_matrix(int *B, int *B_T, int N) {
+    #pragma omp parallel for
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            B_T[j * N + i] = B[i * N + j];
+        }
+    }
+}
+
+void matrix_multiply_original(int *A, int *B, int *C, int N) {
+    #pragma omp parallel for
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            int sum = 0;
+            for (int k = 0; k < N; k++) {
+                sum += A[i * N + k] * B[k * N + j];
+            }
+            C[i * N + j] = sum;
+        }
+    }
+}
+
+void matrix_multiply_transposed(int *A, int *B_T, int *C, int N) {
+    #pragma omp parallel for
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            int sum = 0;
+            for (int k = 0; k < N; k++) {
+                sum += A[i * N + k] * B_T[j * N + k];
+            }
+            C[i * N + j] = sum;
+        }
+    }
+}
+
+int main() {
+    int N = 1000;
+    int *A = (int *)malloc(N * N * sizeof(int));
+    int *B = (int *)malloc(N * N * sizeof(int));
+    int *B_T = (int *)malloc(N * N * sizeof(int));
+    int *C = (int *)malloc(N * N * sizeof(int));
+
+    // Initialize matrices A and B with random values
+    for (int i = 0; i < N * N; i++) {
+        A[i] = rand() % 100;
+        B[i] = rand() % 100;
+    }
+
+    transpose_matrix(B, B_T, N);
+
+    double start = omp_get_wtime();
+    matrix_multiply_original(A, B, C, N);
+    double end = omp_get_wtime();
+    printf("Original execution time: %f seconds\n", end - start);
+
+    start = omp_get_wtime();
+    matrix_multiply_transposed(A, B_T, C, N);
+    end = omp_get_wtime();
+    printf("Transposed execution time: %f seconds\n", end - start);
+
+    free(A);
+    free(B);
+    free(B_T);
+    free(C);
+
+    return 0;
